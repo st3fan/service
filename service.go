@@ -8,18 +8,28 @@ import (
 	"syscall"
 )
 
+type ServiceRunner interface {
+	Run(context.Context)
+}
+
 type ServiceFunc func(context.Context)
 
-func Run(ctx context.Context, fn ServiceFunc) {
+func (fn ServiceFunc) Run(ctx context.Context) {
+	fn(ctx)
+}
+
+func Run(ctx context.Context, runners ...ServiceRunner) {
 	wg := &sync.WaitGroup{}
-	wg.Add(1)
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	go func() {
-		defer wg.Done()
-		fn(ctx)
-	}()
+	for _, runner := range runners {
+		wg.Add(1)
+		go func(runner ServiceRunner) {
+			defer wg.Done()
+			runner.Run(ctx)
+		}(runner)
+	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
